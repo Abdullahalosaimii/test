@@ -14,7 +14,7 @@ Enable **GitHub Pages** on this repo (Settings → Pages → Deploy from branch
 `main`, folder `/root`) and it will be live at:
 
 ```
-https://<your-username>.github.io/<repo-name>/
+git@github.com:Abdullahalosaimii/test.git>/
 ```
 
 ## Features
@@ -45,7 +45,7 @@ pulled from Google Fonts.
 ## Running locally
 
 ```bash
-git clone https://github.com/<your-username>/<repo-name>.git
+git clone git@github.com:Abdullahalosaimii/test .git.git
 cd <repo-name>
 open index.html   # or just double-click the file
 ```
