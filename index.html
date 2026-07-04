@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<!-- Developed & built by Abdullah AL-osaimi -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lattice_OS — Network Surveillance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050A08;
+    --panel:#081410;
+    --panel-2:#0C1B15;
+    --border:#1C3B2E;
+    --border-bright:#2E6B4E;
+    --grid:#12241C;
+    --text:#BFF7D6;
+    --text-dim:#4C7A63;
+    --text-mid:#7FAF95;
+    --green:#39FF88;
+    --green-dim: rgba(57,255,136,0.12);
+    --amber:#FFC145;
+    --amber-dim: rgba(255,193,69,0.14);
+    --red:#FF5252;
+    --red-dim: rgba(255,82,82,0.14);
+    --spark:#F2FFF7;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    --display: 'VT323', var(--mono);
+    --radius: 3px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--mono);
+    min-height:100vh;
+    position:relative;
+  }
+  ::selection{ background:var(--green-dim); color:var(--green); }
+
+  /* crt overlay */
+  .crt-scanlines{
+    position:fixed; inset:0; z-index:60; pointer-events:none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0px, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode:overlay;
+  }
+  .crt-vignette{
+    position:fixed; inset:0; z-index:59; pointer-events:none;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.65) 100%);
+  }
+  @media (prefers-reduced-motion: reduce){ }
+
+  /* boot screen */
+  #boot-screen{
+    position:fixed; inset:0; z-index:200;
+    background:#030605;
+    color:var(--green);
+    font-family:var(--mono);
+    padding:8vh 8vw;
+    display:flex; flex-direction:column; justify-content:center;
+    transition:opacity .6s ease;
+  }
+  #boot-screen.hide{ opacity:0; pointer-events:none; }
+  #boot-lines{ font-size:15px; line-height:1.9; }
+  #boot-lines div{ opacity:0; animation:bootfade .15s ease forwards; }
+  @keyframes bootfade{ to{opacity:1;} }
+  .boot-cursor{ display:inline-block; width:9px; height:16px; background:var(--green); margin-left:4px; animation:blink 1s steps(1) infinite; vertical-align:middle; }
+
+  /* glitch fx */
+  @keyframes glitch-shift{
+    0%{ transform:translate(0,0); }
+    20%{ transform:translate(-4px,2px); }
+    40%{ transform:translate(3px,-2px); }
+    60%{ transform:translate(-3px,1px); }
+    80%{ transform:translate(2px,-1px); }
+    100%{ transform:translate(0,0); }
+  }
+  body.glitching .shell{ animation: glitch-shift .22s steps(2,end) 2; }
+  body.glitching .crt-flash{ opacity:1; }
+  .crt-flash{
+    position:fixed; inset:0; z-index:70; pointer-events:none;
+    background:rgba(255,82,82,0.10);
+    opacity:0; transition:opacity .5s ease;
+  }
+
+  .shell{ display:grid; grid-template-columns:64px 1fr; min-height:100vh; }
+
+  .sidebar{
+    background:var(--panel);
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column; align-items:center;
+    padding:16px 0; gap:26px;
+    position:sticky; top:0; height:100vh;
+  }
+  .mark{ width:30px;height:30px; }
+  .mark svg{ width:100%; height:100%; display:block; }
+  .nav{ display:flex; flex-direction:column; gap:6px; flex:1; }
+  .nav-btn{
+    width:38px;height:38px; display:flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid transparent; border-radius:var(--radius);
+    color:var(--text-dim); cursor:pointer; position:relative;
+    transition:color .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .nav-btn svg{ width:17px;height:17px; }
+  .nav-btn:hover{ color:var(--text); background:var(--panel-2); }
+  .nav-btn.active{ color:var(--green); background:var(--green-dim); border-color:var(--border-bright); }
+  .nav-btn:focus-visible{ outline:2px solid var(--green); outline-offset:2px; }
+  .nav-btn .tip{
+    position:absolute; left:50px; top:50%; transform:translateY(-50%);
+    background:#0C1A14; color:var(--text); font-size:12px; font-family:var(--mono);
+    padding:5px 9px; border:1px solid var(--border); white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:20;
+  }
+  .nav-btn:hover .tip, .nav-btn:focus-visible .tip{ opacity:1; }
+  .sidebar-foot{ color:var(--text-dim); font-family:var(--mono); font-size:9px; writing-mode:vertical-rl; letter-spacing:.15em; padding-bottom:4px; }
+
+  .main{ padding:22px 28px 60px; max-width:1480px; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:20px; }
+  .topbar-left h1{
+    font-family:var(--display); font-size:40px; font-weight:400; margin:0 0 2px;
+    letter-spacing:.02em; color:var(--green);
+    text-shadow:0 0 10px rgba(57,255,136,.55), 0 0 2px rgba(57,255,136,.9);
+  }
+  .topbar-left .sub{ color:var(--text-dim); font-size:12px; letter-spacing:.03em; }
+  .topbar-right{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .clock{
+    font-family:var(--mono); font-size:13px; color:var(--text-mid);
+    background:var(--panel); border:1px solid var(--border); padding:8px 12px;
+    border-radius:var(--radius); min-width:150px; text-align:center;
+  }
+  .status-chip{
+    display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; font-weight:600;
+    padding:8px 14px; border-radius:var(--radius); border:1px solid var(--border); text-transform:uppercase; letter-spacing:.05em;
+  }
+  .status-chip .dot{ width:8px; height:8px; border-radius:50%; }
+  .status-chip.ok{ color:var(--green); background:var(--green-dim); border-color:var(--border-bright); }
+  .status-chip.warn{ color:var(--amber); background:var(--amber-dim); border-color:rgba(255,193,69,.4); }
+  .status-chip.crit{ color:var(--red); background:var(--red-dim); border-color:rgba(255,82,82,.4); }
+  .status-chip.ok .dot{ background:var(--green); box-shadow:0 0 0 3px var(--green-dim); }
+  .status-chip.warn .dot{ background:var(--amber); box-shadow:0 0 0 3px var(--amber-dim); animation:blink 1.4s ease-in-out infinite; }
+  .status-chip.crit .dot{ background:var(--red); box-shadow:0 0 0 3px var(--red-dim); animation:blink .8s ease-in-out infinite; }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+  .alert-badge{
+    display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:12px;
+    color:var(--text-mid); background:var(--panel); border:1px solid var(--border);
+    padding:8px 12px; border-radius:var(--radius); text-transform:uppercase; letter-spacing:.04em;
+  }
+  .alert-badge b{ color:var(--text); font-size:13px; }
+
+  .live-tag{
+    display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10px;
+    color:var(--red); letter-spacing:.08em;
+  }
+  .live-tag .dot{ width:6px; height:6px; border-radius:50%; background:var(--red); animation:blink 1s ease-in-out infinite; }
+
+  /* kpi cards */
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+  .card{
+    position:relative;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px;
+  }
+  .card::before, .card::after, .panel::before, .panel::after{
+    content:''; position:absolute; width:9px; height:9px; opacity:.85;
+  }
+  .card::before, .panel::before{ top:-1px; left:-1px; border-top:2px solid var(--green); border-left:2px solid var(--green); }
+  .card::after, .panel::after{ bottom:-1px; right:-1px; border-bottom:2px solid var(--green); border-right:2px solid var(--green); }
+
+  .kpi .label{ font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--text-dim); margin-bottom:10px; font-weight:600; }
+  .kpi .value-row{ display:flex; align-items:baseline; gap:8px; }
+  .kpi .value{ font-family:var(--display); font-size:32px; color:var(--text); }
+  .kpi .unit{ font-family:var(--mono); font-size:12px; color:var(--text-dim); }
+  .kpi .trend{ font-family:var(--mono); font-size:11px; margin-top:6px; display:flex; align-items:center; gap:5px; }
+  .trend.up{ color:var(--red); }
+  .trend.down{ color:var(--green); }
+  .trend.flat{ color:var(--text-dim); }
+
+  .panel{ position:relative; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:18px 18px 14px; }
+  .panel-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+  .panel-head h2{
+    font-family:var(--mono); font-size:12px; font-weight:600; margin:0;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--text-mid);
+  }
+  .panel-head h2::before{ content:'// '; color:var(--text-dim); }
+  .panel-head .meta{ font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+
+  .row-charts{ display:grid; grid-template-columns:1.6fr 1fr; gap:14px; margin-bottom:14px; }
+  .row-topo{ display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-bottom:14px; }
+
+  /* topology + radar */
+  .topo-wrap{ position:relative; }
+  .radar-ring{ fill:none; stroke:var(--green); stroke-width:1; opacity:.18; }
+  .node-up{ fill:var(--panel-2); stroke:var(--green); }
+  .node-warn{ fill:var(--panel-2); stroke:var(--amber); }
+  .node-down{ fill:var(--panel-2); stroke:var(--red); }
+  .node-label{ font-family:var(--mono); font-size:9.5px; fill:var(--text-mid); letter-spacing:.02em; }
+  .link-line{ stroke:var(--grid); stroke-width:1.6; fill:none; }
+  .pulse-dot{ filter:drop-shadow(0 0 4px var(--spark)); }
+  .ring-warn{ animation:ringpulse 1.4s ease-in-out infinite; }
+  .ring-crit{ animation:ringpulse .8s ease-in-out infinite; }
+  @keyframes ringpulse{ 0%,100%{opacity:1;} 50%{opacity:.2;} }
+
+  .topo-legend{ display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; }
+  .topo-legend .item{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .topo-legend .sw{ width:8px; height:8px; border-radius:50%; }
+
+  .alert-feed{ display:flex; flex-direction:column; gap:0; max-height:300px; overflow-y:auto; font-size:12px; }
+  .alert-item{ display:flex; gap:8px; padding:8px 0; border-bottom:1px solid var(--grid); }
+  .alert-item:last-child{ border-bottom:none; }
+  .alert-item .lvl{ font-weight:700; letter-spacing:.03em; flex-shrink:0; width:42px; }
+  .alert-item .lvl.info{ color:var(--text-mid); }
+  .alert-item .lvl.warn{ color:var(--amber); }
+  .alert-item .lvl.crit{ color:var(--red); }
+  .alert-item .lvl.ok{ color:var(--green); }
+  .alert-item .ts{ color:var(--text-dim); flex-shrink:0; }
+  .alert-item .msg{ color:var(--text); }
+  .alert-feed::-webkit-scrollbar{ width:6px; }
+  .alert-feed::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+
+  /* table */
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:740px; }
+  thead th{
+    text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--text-dim); font-weight:600;
+    padding:0 12px 10px; border-bottom:1px solid var(--border);
+  }
+  tbody td{ padding:11px 12px; border-bottom:1px solid var(--grid); color:var(--text-mid); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--panel-2); }
+  td.node-name{ color:var(--green); font-family:var(--mono); font-weight:500; }
+  td.mono{ font-family:var(--mono); }
+  .pill{ display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; font-weight:600; padding:3px 9px; border-radius:2px; text-transform:uppercase; letter-spacing:.04em; }
+  .pill .dot{ width:6px; height:6px; border-radius:50%; }
+  .pill.up{ color:var(--green); background:var(--green-dim); }
+  .pill.up .dot{ background:var(--green); }
+  .pill.warn{ color:var(--amber); background:var(--amber-dim); }
+  .pill.warn .dot{ background:var(--amber); }
+  .pill.down{ color:var(--red); background:var(--red-dim); }
+  .pill.down .dot{ background:var(--red); }
+
+  footer.foot{ margin-top:26px; font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:center; letter-spacing:.03em; }
+
+  @media (max-width:980px){
+    .shell{ grid-template-columns:1fr; }
+    .sidebar{ position:sticky; height:auto; width:100%; flex-direction:row; padding:10px 14px; gap:14px; top:0; z-index:30; border-right:none; border-bottom:1px solid var(--border); }
+    .nav{ flex-direction:row; flex:none; }
+    .sidebar-foot{ display:none; }
+    .main{ padding:18px 16px 50px; }
+    .kpis{ grid-template-columns:repeat(2,1fr); }
+    .row-charts, .row-topo{ grid-template-columns:1fr; }
+  }
+  @media (max-width:520px){
+    .kpis{ grid-template-columns:1fr 1fr; }
+    .topbar-right{ width:100%; justify-content:space-between; }
+    .topbar-left h1{ font-size:32px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .status-chip .dot, .ring-warn, .ring-crit, .live-tag .dot, .boot-cursor{ animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="crt-scanlines"></div>
+<div class="crt-vignette"></div>
+<div class="crt-flash"></div>
+
+<div id="boot-screen">
+  <div id="boot-lines"></div>
+</div>
+
+<div class="shell">
+
+  <aside class="sidebar" aria-label="Primary navigation">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="7" r="3.4" fill="none" stroke="#39FF88" stroke-width="1.6"/>
+        <circle cx="6" cy="25" r="3.4" fill="none" stroke="#39FF88" stroke-width="1.6"/>
+        <circle cx="26" cy="25" r="3.4" fill="none" stroke="#39FF88" stroke-width="1.6"/>
+        <path d="M16 10.4 L6 21.6 M16 10.4 L26 21.6 M6 25 L26 25" stroke="#1C3B2E" stroke-width="1.4"/>
+      </svg>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn active" data-target="#overview" aria-label="Overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="tip">Overview</span>
+      </button>
+      <button class="nav-btn" data-target="#topology" aria-label="Topology">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="5" r="2.3"/><circle cx="5" cy="19" r="2.3"/><circle cx="19" cy="19" r="2.3"/><path d="M12 7.3 6.6 17M12 7.3 17.4 17M7 19h10"/></svg>
+        <span class="tip">Topology</span>
+      </button>
+      <button class="nav-btn" data-target="#traffic" aria-label="Traffic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17l5-6 4 4 8-9"/><path d="M14 6h6v6"/></svg>
+        <span class="tip">Traffic</span>
+      </button>
+      <button class="nav-btn" data-target="#alerts" aria-label="Alerts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v9M12 17.5h.01"/><path d="M10.6 3.6 2.7 18a1.6 1.6 0 0 0 1.4 2.4h15.8a1.6 1.6 0 0 0 1.4-2.4L13.4 3.6a1.6 1.6 0 0 0-2.8 0Z"/></svg>
+        <span class="tip">Alerts</span>
+      </button>
+      <button class="nav-btn" data-target="#nodes" aria-label="Nodes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>
+        <span class="tip">Nodes</span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">LATTICE_OS v2.0</div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar" id="overview">
+      <div class="topbar-left">
+        <h1>LATTICE_OS<span class="boot-cursor"></span></h1>
+        <div class="sub">// network surveillance · meridian infrastructure · 10 monitored nodes</div>
+      </div>
+      <div class="topbar-right">
+        <div class="status-chip ok" id="overall-status">
+          <span class="dot"></span><span id="overall-status-text">Operational</span>
+        </div>
+        <div class="alert-badge"><b id="alert-count">0</b> active alerts</div>
+        <div class="clock" id="clock">--:--:--</div>
+      </div>
+    </div>
+
+    <section class="kpis" aria-label="Key metrics">
+      <div class="card kpi">
+        <div class="label">Nodes healthy</div>
+        <div class="value-row"><span class="value" id="kpi-nodes">10 / 10</span></div>
+        <div class="trend flat" id="kpi-nodes-trend">— steady</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Avg latency</div>
+        <div class="value-row"><span class="value" id="kpi-latency">--</span><span class="unit">ms</span></div>
+        <div class="trend flat" id="kpi-latency-trend">— steady</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Packet loss</div>
+        <div class="value-row"><span class="value" id="kpi-loss">--</span><span class="unit">%</span></div>
+        <div class="trend flat" id="kpi-loss-trend">— steady</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Throughput</div>
+        <div class="value-row"><span class="value" id="kpi-throughput">--</span><span class="unit">Gbps</span></div>
+        <div class="trend flat" id="kpi-throughput-trend">— steady</div>
+      </div>
+    </section>
+
+    <section class="row-charts" id="traffic" aria-label="Traffic and latency history">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Bandwidth · 60s</h2>
+          <span class="live-tag"><span class="dot"></span>LIVE</span>
+        </div>
+        <svg id="chart-bandwidth" viewBox="0 0 600 160" preserveAspectRatio="none" style="width:100%;height:160px;">
+          <defs>
+            <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#39FF88" stop-opacity="0.35"/>
+              <stop offset="100%" stop-color="#39FF88" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g id="bw-gridlines"></g>
+          <path id="bw-fill" fill="url(#bwGrad)" d=""></path>
+          <path id="bw-line" fill="none" stroke="#39FF88" stroke-width="2" d=""></path>
+        </svg>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Avg latency · 60s</h2>
+          <span class="meta" id="lat-current">-- ms</span>
+        </div>
+        <svg id="chart-latency" viewBox="0 0 400 160" preserveAspectRatio="none" style="width:100%;height:160px;">
+          <g id="lat-gridlines"></g>
+          <path id="lat-line" fill="none" stroke="#39FF88" stroke-width="2" d=""></path>
+        </svg>
+      </div>
+    </section>
+
+    <section class="row-topo">
+      <div class="panel topo-wrap" id="topology">
+        <div class="panel-head">
+          <h2>Network topology</h2>
+          <span class="live-tag"><span class="dot"></span>SCANNING</span>
+        </div>
+        <svg id="topo-svg" viewBox="0 0 800 300" xmlns:xlink="http://www.w3.org/1999/xlink" style="width:100%;height:auto;display:block;"></svg>
+        <div class="topo-legend">
+          <span class="item"><span class="sw" style="background:var(--green)"></span>Up</span>
+          <span class="item"><span class="sw" style="background:var(--amber)"></span>Degraded</span>
+          <span class="item"><span class="sw" style="background:var(--red)"></span>Down</span>
+          <span class="item"><span class="sw" style="background:var(--spark)"></span>Live traffic</span>
+        </div>
+      </div>
+      <div class="panel" id="alerts">
+        <div class="panel-head">
+          <h2>Alert log</h2>
+          <span class="meta">tail -f</span>
+        </div>
+        <div class="alert-feed" id="alert-feed" role="log" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="nodes">
+      <div class="panel-head">
+        <h2>Monitored nodes</h2>
+        <span class="meta" id="nodes-meta">10 devices</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Node</th><th>Role</th><th>IP address</th><th>Status</th><th>Latency</th><th>Uptime (30d)</th><th>Last seen</th></tr>
+          </thead>
+          <tbody id="node-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="foot">LATTICE_OS · simulated telemetry for demonstration · refresh interval 2.5s<br>تم تطويره وإنشاؤه بواسطة Abdullah AL-osaimi</footer>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // boot sequence
+  var bootLines = [
+    'LATTICE_OS v2.0 — boot sequence initiated',
+    'mounting telemetry bus.................. OK',
+    'establishing uplink: meridian-core...... OK',
+    'loading node registry (10 devices)...... OK',
+    'calibrating radar array................. OK',
+    'handshake complete — welcome, operator.'
+  ];
+  var bootLinesEl = document.getElementById('boot-lines');
+  var bootScreen = document.getElementById('boot-screen');
+
+  function finishBoot(){
+    bootScreen.classList.add('hide');
+    setTimeout(function(){ bootScreen.style.display = 'none'; }, 650);
+  }
+  function runBoot(){
+    if(reduceMotion){ finishBoot(); return; }
+    var i = 0;
+    function next(){
+      if(i >= bootLines.length){ setTimeout(finishBoot, 450); return; }
+      var d = document.createElement('div');
+      d.textContent = bootLines[i];
+      bootLinesEl.appendChild(d);
+      i++;
+      setTimeout(next, 240);
+    }
+    next();
+  }
+  runBoot();
+
+  function triggerGlitch(){
+    if(reduceMotion) return;
+    document.body.classList.add('glitching');
+    setTimeout(function(){ document.body.classList.remove('glitching'); }, 380);
+  }
+
+  // sidebar nav
+  var navBtns = document.querySelectorAll('.nav-btn');
+  navBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      navBtns.forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      var target = document.querySelector(btn.getAttribute('data-target'));
+      if(target){ target.scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block:'start'}); }
+    });
+  });
+
+  var clockEl = document.getElementById('clock');
+  function tickClock(){
+    var now = new Date();
+    var pad = function(n){ return n.toString().padStart(2,'0'); };
+    clockEl.textContent = pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // node + link data
+  var nodes = [
+    {id:'core-rtr-01', role:'Core Router',        ip:'10.0.0.1',  x:400, y:150, status:'up', latency:3,  base:3,  uptime:99.99},
+    {id:'dist-sw-a',   role:'Distribution Switch', ip:'10.0.1.1',  x:220, y:150, status:'up', latency:5,  base:5,  uptime:99.98},
+    {id:'dist-sw-b',   role:'Distribution Switch', ip:'10.0.2.1',  x:580, y:150, status:'up', latency:6,  base:6,  uptime:99.97},
+    {id:'mon-agent-01',role:'Monitoring Agent',    ip:'10.0.0.9',  x:400, y:50,  status:'up', latency:2,  base:2,  uptime:100.00},
+    {id:'fw-edge-01',  role:'Edge Firewall',       ip:'10.0.1.10', x:120, y:250, status:'up', latency:8,  base:8,  uptime:99.95},
+    {id:'web-01',      role:'Web Server',          ip:'10.0.1.21', x:220, y:250, status:'up', latency:14, base:14, uptime:99.92},
+    {id:'web-02',      role:'Web Server',          ip:'10.0.1.22', x:320, y:250, status:'up', latency:16, base:16, uptime:99.90},
+    {id:'db-primary',  role:'Database Primary',    ip:'10.0.2.30', x:480, y:250, status:'up', latency:11, base:11, uptime:99.96},
+    {id:'db-replica',  role:'Database Replica',    ip:'10.0.2.31', x:580, y:250, status:'up', latency:12, base:12, uptime:99.94},
+    {id:'cdn-edge-eu', role:'CDN Edge Node',       ip:'10.0.2.40', x:680, y:250, status:'up', latency:9,  base:9,  uptime:99.99}
+  ];
+
+  var links = [
+    {a:'core-rtr-01', b:'dist-sw-a'},
+    {a:'core-rtr-01', b:'dist-sw-b'},
+    {a:'core-rtr-01', b:'mon-agent-01'},
+    {a:'dist-sw-a', b:'fw-edge-01'},
+    {a:'dist-sw-a', b:'web-01'},
+    {a:'dist-sw-a', b:'web-02'},
+    {a:'dist-sw-b', b:'db-primary'},
+    {a:'dist-sw-b', b:'db-replica'},
+    {a:'dist-sw-b', b:'cdn-edge-eu'}
+  ];
+
+  var nodeById = {};
+  nodes.forEach(function(n){ nodeById[n.id] = n; });
+
+  // draw the topology map
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var xlinkNS = 'http://www.w3.org/1999/xlink';
+  var topoSvg = document.getElementById('topo-svg');
+
+  function el(tag, attrs){
+    var e = document.createElementNS(svgNS, tag);
+    for(var k in attrs){ e.setAttribute(k, attrs[k]); }
+    return e;
+  }
+
+  var CORE_X = 400, CORE_Y = 150;
+
+  /* radar rings, centered on core router */
+  [55, 105, 155, 205].forEach(function(r){
+    topoSvg.appendChild(el('circle', {cx:CORE_X, cy:CORE_Y, r:r, class:'radar-ring'}));
+  });
+
+  if(!reduceMotion){
+    var sweepGrad = document.createElementNS(svgNS, 'defs');
+    var lg = el('linearGradient', {id:'sweepGrad', x1:'0', y1:'0', x2:'1', y2:'0'});
+    lg.appendChild(el('stop', {offset:'0%', 'stop-color':'#39FF88', 'stop-opacity':'0.45'}));
+    lg.appendChild(el('stop', {offset:'100%', 'stop-color':'#39FF88', 'stop-opacity':'0'}));
+    sweepGrad.appendChild(lg);
+    topoSvg.appendChild(sweepGrad);
+
+    var sweepG = el('g', {});
+    var sweepWedge = el('path', {
+      d:'M '+CORE_X+' '+CORE_Y+' L '+CORE_X+' '+(CORE_Y-205)+' A 205 205 0 0 1 '+(CORE_X+55)+' '+(CORE_Y-198)+' Z',
+      fill:'url(#sweepGrad)', opacity:'0.55'
+    });
+    var rot = el('animateTransform', {attributeName:'transform', type:'rotate', from:'0 '+CORE_X+' '+CORE_Y, to:'360 '+CORE_X+' '+CORE_Y, dur:'4.5s', repeatCount:'indefinite'});
+    sweepG.appendChild(sweepWedge);
+    sweepG.appendChild(rot);
+    topoSvg.appendChild(sweepG);
+  }
+
+  var linkPathEls = {};
+  var pulseEls = {};
+
+  links.forEach(function(link, i){
+    var na = nodeById[link.a], nb = nodeById[link.b];
+    var pathId = 'link-'+i;
+    var d = 'M '+na.x+' '+na.y+' L '+nb.x+' '+nb.y;
+    var path = el('path', {id:pathId, d:d, class:'link-line'});
+    topoSvg.appendChild(path);
+    linkPathEls[pathId] = {path:path, a:na, b:nb};
+
+    if(!reduceMotion){
+      var dot = el('circle', {r:'3', fill:'#F2FFF7', class:'pulse-dot'});
+      var anim = el('animateMotion', {dur:(1.6 + Math.random()*1.2).toFixed(2)+'s', repeatCount:'indefinite', rotate:'auto'});
+      var mpath = el('mpath', {});
+      mpath.setAttributeNS(xlinkNS, 'xlink:href', '#'+pathId);
+      mpath.setAttribute('href', '#'+pathId);
+      anim.appendChild(mpath);
+      dot.appendChild(anim);
+      topoSvg.appendChild(dot);
+      pulseEls[pathId] = dot;
+    }
+  });
+
+  var nodeCircleEls = {};
+  var nodeRingEls = {};
+
+  nodes.forEach(function(n){
+    var g = el('g', {'data-node': n.id});
+    var ring = el('circle', {cx:n.x, cy:n.y, r:14, fill:'none', stroke:'currentColor', 'stroke-width':1.4, opacity:0.5});
+    var circle = el('circle', {cx:n.x, cy:n.y, r:9, class:'node-up', 'stroke-width':2});
+    var label = el('text', {x:n.x, y:n.y+26, class:'node-label', 'text-anchor':'middle'});
+    label.textContent = n.id;
+    g.appendChild(ring);
+    g.appendChild(circle);
+    g.appendChild(label);
+    topoSvg.appendChild(g);
+    nodeCircleEls[n.id] = circle;
+    nodeRingEls[n.id] = ring;
+  });
+
+  function statusClass(status){ return status === 'up' ? 'node-up' : (status === 'warn' ? 'node-warn' : 'node-down'); }
+  function statusColorVar(status){ return status === 'up' ? 'var(--green)' : (status === 'warn' ? 'var(--amber)' : 'var(--red)'); }
+
+  function refreshTopology(){
+    nodes.forEach(function(n){
+      var circle = nodeCircleEls[n.id];
+      var ring = nodeRingEls[n.id];
+      circle.setAttribute('class', statusClass(n.status));
+      ring.style.color = statusColorVar(n.status);
+      ring.classList.remove('ring-warn','ring-crit');
+      if(n.status === 'warn') ring.classList.add('ring-warn');
+      if(n.status === 'down') ring.classList.add('ring-crit');
+    });
+    for(var pid in linkPathEls){
+      var info = linkPathEls[pid];
+      var down = (info.a.status === 'down' || info.b.status === 'down');
+      if(pulseEls[pid]) pulseEls[pid].style.opacity = down ? '0' : '1';
+      info.path.style.stroke = down ? 'rgba(255,82,82,0.35)' : 'var(--grid)';
+    }
+  }
+  refreshTopology();
+
+  // bandwidth + latency charts
+  var HISTORY_LEN = 30;
+  var bandwidthHistory = [];
+  var latencyHistory = [];
+  for(var i=0;i<HISTORY_LEN;i++){
+    bandwidthHistory.push(5.2 + Math.random()*1.5);
+    latencyHistory.push(9 + Math.random()*3);
+  }
+
+  function buildLinePath(data, width, height, min, max){
+    var stepX = width / (data.length - 1);
+    var pts = data.map(function(v, idx){
+      var x = idx * stepX;
+      var y = height - ((v - min) / (max - min)) * height;
+      y = Math.max(2, Math.min(height-2, y));
+      return x.toFixed(1)+' '+y.toFixed(1);
+    });
+    return 'M ' + pts.join(' L ');
+  }
+  function buildAreaPath(data, width, height, min, max){
+    var line = buildLinePath(data, width, height, min, max);
+    var stepX = width / (data.length - 1);
+    var lastX = (data.length - 1) * stepX;
+    return line + ' L '+lastX.toFixed(1)+' '+height+' L 0 '+height+' Z';
+  }
+  function drawGridlines(container, width, height, rows){
+    container.innerHTML = '';
+    for(var r=1;r<rows;r++){
+      var y = (height/rows)*r;
+      container.appendChild(el('line', {x1:0, y1:y, x2:width, y2:y, stroke:'#12241C', 'stroke-width':1}));
+    }
+  }
+  drawGridlines(document.getElementById('bw-gridlines'), 600, 160, 4);
+  drawGridlines(document.getElementById('lat-gridlines'), 400, 160, 4);
+
+  function renderCharts(){
+    var bwMin = 2, bwMax = 10;
+    var latMin = 2, latMax = 25;
+    document.getElementById('bw-line').setAttribute('d', buildLinePath(bandwidthHistory, 600, 150, bwMin, bwMax));
+    document.getElementById('bw-fill').setAttribute('d', buildAreaPath(bandwidthHistory, 600, 150, bwMin, bwMax));
+
+    var latColor = '#39FF88';
+    var curLat = latencyHistory[latencyHistory.length-1];
+    if(curLat > 18) latColor = '#FF5252';
+    else if(curLat > 12) latColor = '#FFC145';
+    var latLine = document.getElementById('lat-line');
+    latLine.setAttribute('d', buildLinePath(latencyHistory, 400, 150, latMin, latMax));
+    latLine.setAttribute('stroke', latColor);
+    document.getElementById('lat-current').textContent = curLat.toFixed(1)+' ms';
+  }
+  renderCharts();
+
+  // alert log
+  var alertFeedEl = document.getElementById('alert-feed');
+  function pad2(n){ return n.toString().padStart(2,'0'); }
+  function nowStamp(){
+    var d = new Date();
+    return pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
+  }
+  function pushAlert(sev, msg){
+    var item = document.createElement('div');
+    item.className = 'alert-item';
+    var lvl = document.createElement('span');
+    lvl.className = 'lvl '+sev;
+    lvl.textContent = sev.toUpperCase();
+    var ts = document.createElement('span');
+    ts.className = 'ts';
+    ts.textContent = '['+nowStamp()+']';
+    var msgEl = document.createElement('span');
+    msgEl.className = 'msg';
+    msgEl.textContent = msg;
+    item.appendChild(ts);
+    item.appendChild(lvl);
+    item.appendChild(msgEl);
+    alertFeedEl.insertBefore(item, alertFeedEl.firstChild);
+    while(alertFeedEl.children.length > 12){ alertFeedEl.removeChild(alertFeedEl.lastChild); }
+  }
+  pushAlert('info', 'Monitoring session started for meridian infrastructure.');
+
+  var tbody = document.getElementById('node-table-body');
+  function statusPill(status){
+    var cls = status === 'up' ? 'up' : (status === 'warn' ? 'warn' : 'down');
+    var label = status === 'up' ? 'Up' : (status === 'warn' ? 'Degraded' : 'Down');
+    return '<span class="pill '+cls+'"><span class="dot"></span>'+label+'</span>';
+  }
+  function renderTable(){
+    tbody.innerHTML = nodes.map(function(n){
+      var latText = n.status === 'down' ? '—' : Math.round(n.latency)+' ms';
+      return '<tr>'+
+        '<td class="node-name">'+n.id+'</td>'+
+        '<td>'+n.role+'</td>'+
+        '<td class="mono">'+n.ip+'</td>'+
+        '<td>'+statusPill(n.status)+'</td>'+
+        '<td class="mono">'+latText+'</td>'+
+        '<td class="mono">'+n.uptime.toFixed(2)+'%</td>'+
+        '<td class="mono">'+(n.status === 'down' ? nowStamp() : 'now')+'</td>'+
+      '</tr>';
+    }).join('');
+  }
+  renderTable();
+
+  // kpis
+  var overallChip = document.getElementById('overall-status');
+  var overallText = document.getElementById('overall-status-text');
+  var alertCountEl = document.getElementById('alert-count');
+  var prevAvgLatency = null, prevThroughput = null, prevLoss = null;
+
+  function setTrend(el, delta, betterWhenDown, formatFn){
+    var arrow, cls;
+    if(Math.abs(delta) < 0.001){ arrow = '—'; cls = 'flat'; }
+    else if(delta > 0){ arrow = '▲'; cls = betterWhenDown ? 'up' : 'down'; }
+    else { arrow = '▼'; cls = betterWhenDown ? 'down' : 'up'; }
+    el.className = 'trend '+cls;
+    el.textContent = arrow+' '+formatFn(Math.abs(delta));
+  }
+
+  function updateKPIs(){
+    var healthy = nodes.filter(function(n){ return n.status === 'up'; }).length;
+    var warn = nodes.filter(function(n){ return n.status === 'warn'; }).length;
+    var down = nodes.filter(function(n){ return n.status === 'down'; }).length;
+
+    document.getElementById('kpi-nodes').textContent = healthy+' / '+nodes.length;
+
+    var upNodes = nodes.filter(function(n){ return n.status !== 'down'; });
+    var avgLatency = upNodes.reduce(function(s,n){ return s + n.latency; }, 0) / (upNodes.length || 1);
+    document.getElementById('kpi-latency').textContent = avgLatency.toFixed(1);
+
+    var loss = Math.min(100, (down*3.2 + warn*0.8) + Math.random()*0.3);
+    document.getElementById('kpi-loss').textContent = loss.toFixed(2);
+
+    var throughput = bandwidthHistory[bandwidthHistory.length-1];
+    document.getElementById('kpi-throughput').textContent = throughput.toFixed(2);
+
+    if(prevAvgLatency !== null){
+      setTrend(document.getElementById('kpi-latency-trend'), avgLatency - prevAvgLatency, true, function(v){ return v.toFixed(1)+' ms'; });
+      setTrend(document.getElementById('kpi-loss-trend'), loss - prevLoss, true, function(v){ return v.toFixed(2)+'%'; });
+      setTrend(document.getElementById('kpi-throughput-trend'), throughput - prevThroughput, false, function(v){ return v.toFixed(2)+' Gbps'; });
+    }
+    prevAvgLatency = avgLatency; prevLoss = loss; prevThroughput = throughput;
+
+    var nodesTrendEl = document.getElementById('kpi-nodes-trend');
+    if(down > 0){ nodesTrendEl.className = 'trend up'; nodesTrendEl.textContent = '▲ '+down+' offline'; }
+    else if(warn > 0){ nodesTrendEl.className = 'trend up'; nodesTrendEl.textContent = '▲ '+warn+' degraded'; }
+    else { nodesTrendEl.className = 'trend flat'; nodesTrendEl.textContent = '— all healthy'; }
+
+    alertCountEl.textContent = warn + down;
+
+    var overall = down > 0 ? 'crit' : (warn > 0 ? 'warn' : 'ok');
+    overallChip.className = 'status-chip '+overall;
+    overallText.textContent = overall === 'crit' ? 'Critical' : (overall === 'warn' ? 'Degraded' : 'Operational');
+  }
+  updateKPIs();
+
+  // fake data loop, runs every 2.5s
+  // small random walk so numbers don't jump around too much
+  function jitter(n){
+    var target = n.base * (0.85 + Math.random()*0.5);
+    if(n.status === 'warn') target *= 2.4;
+    if(n.status === 'down') target = n.base;
+    n.latency = n.latency + (target - n.latency) * 0.4;
+  }
+
+  function maybeFlipStatus(n){
+    var roll = Math.random();
+    if(n.status === 'up' && roll < 0.025){
+      n.status = 'warn';
+      pushAlert('warn', n.id+' latency degraded ('+Math.round(n.latency*2.2)+' ms)');
+    } else if(n.status === 'warn'){
+      if(roll < 0.12){ n.status = 'up'; pushAlert('ok', n.id+' recovered — latency nominal.'); }
+      else if(roll > 0.97){ n.status = 'down'; pushAlert('crit', n.id+' not responding. investigating.'); triggerGlitch(); }
+    } else if(n.status === 'down' && roll < 0.35){
+      n.status = 'up';
+      pushAlert('ok', n.id+' is back online.');
+    }
+  }
+
+  function tick(){
+    nodes.forEach(function(n){ maybeFlipStatus(n); jitter(n); });
+
+    var upCount = nodes.filter(function(n){return n.status==='up';}).length;
+    var lastBw = bandwidthHistory[bandwidthHistory.length-1];
+    var bwTarget = 4.5 + (upCount/nodes.length) * 3.5 + (Math.random()-0.5)*1.2;
+    var nextBw = Math.max(1.2, lastBw + (bwTarget - lastBw)*0.5);
+    bandwidthHistory.push(nextBw);
+    if(bandwidthHistory.length > HISTORY_LEN) bandwidthHistory.shift();
+
+    var upNodesForLat = nodes.filter(function(n){ return n.status !== 'down'; });
+    var avgLat = upNodesForLat.reduce(function(s,n){return s+n.latency;},0) / (upNodesForLat.length||1);
+    latencyHistory.push(avgLat);
+    if(latencyHistory.length > HISTORY_LEN) latencyHistory.shift();
+
+    refreshTopology();
+    renderCharts();
+    renderTable();
+    updateKPIs();
+  }
+
+  setInterval(tick, 2500); // could probably be faster but this feels right
+
+})();
+</script>
+</body>
+</html>
